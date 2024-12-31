@@ -8,11 +8,11 @@ from nes_py.wrappers import JoypadSpace
 from gym_super_mario_bros.actions import CUSTOM_MOVEMENT
 
 from utils import preprocess_frame
-from model import CustomCNN
-from DQN import DQN
+from model_AC import ActorCriticCNN 
+from DQN import ACDQN
 
 # ========== Config ===========
-MODEL_PATH =         # 模型權重檔案的存放路徑
+MODEL_PATH = "ckpt_test/1/step_42_reward_1551_custom_1496.pth"        # 模型權重檔案的存放路徑
 env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0')                     # 建立《超級瑪利歐兄弟》的遊戲環境(第1個世界的第1關)
 
 # SIMPLE_MOVEMENT可自行定義 以下為自訂範例:
@@ -40,8 +40,8 @@ VISUALIZE = True                                                            # �
 TOTAL_EPISODES = 10                                                         # 測試回合的總數
 
 # ========== Initialize DQN =========== 
-dqn = DQN( 
-    model=CustomCNN, 
+dqn = ACDQN( 
+    model=ActorCriticCNN , 
     state_dim=OBS_SHAPE,
     action_dim=N_ACTIONS,
     learning_rate=0.0001,  
@@ -78,7 +78,8 @@ for episode in range(1, TOTAL_EPISODES + 1):
         # Take action using the trained policy
         state_tensor = torch.tensor(state, dtype=torch.float32, device=device)    # 將 NumPy 格式的 state 轉換為 PyTorch 的 tensor 格式
         with torch.no_grad():                                                       
-            action_probs = torch.softmax(dqn.q_net(state_tensor), dim=1)          # 使用訓練好的 [Q-net] 計算當前狀態的動作分數，並透過 Softmax 轉換為動作機率分佈，輸出範圍為[0,1]，總合為1            
+            action_logits, _ = dqn.q_net(state_tensor)  # 提取動作 logits
+            action_probs = torch.softmax(action_logits, dim=1)          # 使用訓練好的 [Q-net] 計算當前狀態的動作分數，並透過 Softmax 轉換為動作機率分佈，輸出範圍為[0,1]，總合為1            
                                                                                                                                             
             action = torch.argmax(action_probs, dim=1).item()                     # 選擇機率最高的動作作為當下策略的 action
         next_state, reward, done, info = env.step(action)                         # 根據選擇的 action 與環境互動，獲取 next_state、reward、是否終止

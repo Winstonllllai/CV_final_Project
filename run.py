@@ -10,11 +10,12 @@ from gym_super_mario_bros.actions import CUSTOM_MOVEMENT         #從 gym_super_
 
 from utils import preprocess_frame                               #用於對遊戲的畫面進行預處理，例如灰階化、調整大小等，將其轉換為適合神經網路輸入的格式
 from reward import *                                             #模組中導入所有函式，這些函式用於設計和計算自定義獎勵（例如根據 Mario 的硬幣數量、水平位移等來計算獎勵）。
-from model import CustomCNN                                      #自定義的卷積神經網路模型，用於處理遊戲畫面並生成動作決策
+from model_AC import ActorCriticCNN                                      #自定義的卷積神經網路模型，用於處理遊戲畫面並生成動作決策
 # from DQN import DQN, ReplayMemory                                #用於執行強化學習的主要邏輯 DQN模組中導入回放記憶體，用於存儲和抽取遊戲的狀態、動作、獎勵等樣本，提升訓練穩定性。
-from DQN import DQN, PrioritizedReplayMemory
+from DQN import ACDQN, PrioritizedReplayMemory
 
-ROUND = 1
+ROUND = 3
+MODEL_LOAD_PATH = None
 
 # ========== config ===========
 env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0')   #
@@ -26,7 +27,9 @@ LR = 0.00001
 BATCH_SIZE = 32                 #達到batch size更新主網路參數 達到50次更新目標網路的參數
 GAMMA = 0.99                    #控制模型對長期獎勵和短期獎勵的權衡 gamma靠近1 模型更重視長期獎勵
 MEMORY_SIZE = 10000             #用來儲存，遊戲過程中的記錄 如果存超過了 會刪除最早進來的
-EPSILON_END = 0.3               #在訓練過程中，會逐漸從探索（隨機選擇動作）轉向利用（選擇模型預測的最佳動作）。
+EPSILON_START = 1.0
+EPSILON_DECAY = 0.995
+EPSILON_END = 0.2               #在訓練過程中，會逐漸從探索（隨機選擇動作）轉向利用（選擇模型預測的最佳動作）。
                                 #EPSILON的值會隨著訓練進展逐漸下降，直到達到此最小值0.3
                                 #即訓練後期仍保留 30% 的探索概率，避免模型陷入局部最優解
 TARGET_UPDATE = 50              #每隔幾回合去更新目標網路的權重
@@ -39,17 +42,26 @@ device = torch.device("mps")
 # ========================DQN Initialization==========================================
 obs_shape = (1, 84, 84)                         #obs_shape = (1, 84, 84)
 n_actions = len(CUSTOM_MOVEMENT)                #定義動作空間大小，使用SIMPLE_MOVEMENT中的動作數量（例如向右移動、跳躍等）
-model = CustomCNN                               #指定模型架構為CustomCNN用於處理圖像並預測各動作的 Q 值
-dqn = DQN(                                      #初始化 DQN agent
+model = ActorCriticCNN                               #指定模型架構為CustomCNN用於處理圖像並預測各動作的 Q 值
+dqn = ACDQN(                                      #初始化 DQN agent
     model=model,
     state_dim=obs_shape,                        #狀態空間大小
     action_dim=n_actions,                       #動作空間大小
     learning_rate=LR,                           #學習率
     gamma=GAMMA,                                #折扣因子，用於計算未來獎勵
-    epsilon=EPSILON_END,                        #初始探索率
+    epsilon=EPSILON_START,                        #初始探索率
     target_update=TARGET_UPDATE,                #目標網路更新頻率
     device=device
 )
+if MODEL_LOAD_PATH:
+    try:                                                                  # 檢查模型檔案是否存在：
+        model_weights = torch.load(MODEL_LOAD_PATH, map_location=device)       #  若存在，嘗試載入模型權重
+        dqn.q_net.load_state_dict(model_weights)                          #    載入成功，應用到模型
+        dqn.epsilon=EPSILON_START
+        print(f"Model loaded successfully from {MODEL_LOAD_PATH}")             #  若不存在，則FileNotFoundError
+    except Exception as e:
+        print(f"Failed to load model weights: {e}")
+        raise
 
 memory = PrioritizedReplayMemory(MEMORY_SIZE)              #創建經驗回放記憶體，用於存儲狀態轉移
 step = 0                                        #記錄總步數
@@ -116,8 +128,8 @@ for timestep in tqdm(range(1, TOTAL_TIMESTEPS + 1), desc="Training Progress"):  
         
         
         #===========================Store transition in memory 將狀態轉移 (state, action, reward, next_state, done) 存入記憶體
-        #memory.push(state, action, custom_reward //1, next_state, done)      #使用自訂義獎勵
-        memory.push(state, action, reward, next_state, done)                  #使用其預設好的獎勵
+        memory.push(state, action, custom_reward //1, next_state, done)      #使用自訂義獎勵
+        # memory.push(state, action, reward, next_state, done)                  #使用其預設好的獎勵
         #更新當前狀態
         state = next_state
 
@@ -143,8 +155,6 @@ for timestep in tqdm(range(1, TOTAL_TIMESTEPS + 1), desc="Training Progress"):  
                 'dones': batch[4],  # dones 批次
             }
             dqn.train_per_step(state_dict)
-        # Update epsilon
-        dqn.epsilon = EPSILON_END               #訓練前就設定:代理的探索能力會立即降低，可能在策略還不完善時過早專注於利用，會影響最終的學習效果
         
         #================================更新狀態訊息
         prev_info = info
@@ -154,12 +164,14 @@ for timestep in tqdm(range(1, TOTAL_TIMESTEPS + 1), desc="Training Progress"):  
             env.render(mode='human')
 
     # Print cumulative reward for the current timestep
-    print(f"Timestep {timestep} - Total Reward: {cumulative_reward} - Total Custom Reward: {cumulative_custom_reward}")
-
+    print(f"Timestep {timestep} - Total Reward: {cumulative_reward} - Total Custom Reward: {cumulative_custom_reward} - EPSILON: {dqn.epsilon}")
+    # Update epsilon
+    dqn.epsilon = max(EPSILON_END, dqn.epsilon * EPSILON_DECAY)     # 隨著時間逐漸減少探索率               
+    #訓練前就設定:代理的探索能力會立即降低，可能在策略還不完善時過早專注於利用，會影響最終的學習效果
     #如果當前累積獎勵超過歷史最佳值，保存模型的權重 每次超過最佳值就會保留一次
     #要改成自定義獎勵
-    if cumulative_reward > best_reward:
-        best_reward = cumulative_reward
+    if cumulative_custom_reward > best_reward:
+        best_reward = cumulative_custom_reward
         os.makedirs(f"ckpt_test/{ROUND}", exist_ok=True)
         #命名邏輯是採第幾步+最佳獎勵+自訂義獎勵的累積總合
         model_path = os.path.join(f"ckpt_test/{ROUND}",f"step_{timestep}_reward_{int(best_reward)}_custom_{int(cumulative_custom_reward)}.pth")

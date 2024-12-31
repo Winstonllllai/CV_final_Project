@@ -83,6 +83,7 @@ def distance_reward(info, reward, prev_info,distance):
     total_reward = reward
     if info['x_pos'] > distance:
         delta = info['x_pos'] - distance
+        distance = info['x_pos']
         total_reward += delta
     return total_reward
 def death_penalty(info, reward, prev_info):
@@ -95,7 +96,7 @@ def time_penalty(info, reward, prev_info):
     total_reward = reward
     time_passed = prev_info['time'] - info['time']
     if time_passed > 0:
-        total_reward -= time_passed
+        total_reward -= time_passed * 0.5
     return total_reward
 
 

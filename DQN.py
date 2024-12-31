@@ -1,4 +1,4 @@
-import torch as T
+import torch
 import torch.nn.functional as F
 import numpy as np
 import random
@@ -77,7 +77,7 @@ class DQN:
         self.tgt_q_net.load_state_dict(self.q_net.state_dict())                  # 複製 [Q-net] 的權重到 target [Q-net]
 
         # Optimizer
-        self.optimizer = T.optim.Adam(self.q_net.parameters(), lr=learning_rate)
+        self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=learning_rate)
     
     # 定義神經網路構造函數
     def _build_net(self, state_dim, action_dim):                                 # 根據傳入的模型架構 (self.model) 初始化後的神經網路，並將其移到 device 上
@@ -90,8 +90,8 @@ class DQN:
             return np.random.randint(self.action_dim)  # 生成一個在 [0, self.action_dim) 範圍內的隨機整數
 
         # Exploitation Known Policy(利用)                                        # 隨機浮點數大於 epsilon 執行根據推理的動作（利用）
-        state_x = T.tensor([state], dtype=T.float32, device=self.device)  # 單一 state 轉換為 PyTorch 張量
-        with T.no_grad():
+        state_x = torch.tensor([state], dtype=torch.float32, device=self.device)  # 單一 state 轉換為 PyTorch 張量
+        with torch.no_grad():
             q_values = self.q_net(state_x)  # 使用 [Q-net] 計算該 state 下每個動作的 Q 值
             action_probs = F.softmax(q_values, dim=1)  # 通過 softmax 將 Q 值轉換為機率分佈
 
@@ -104,7 +104,7 @@ class DQN:
             action_probs = action_probs / action_probs.sum()
 
             # 將調整後的機率轉換為類別分佈
-            action_dist = T.distributions.Categorical(action_probs)
+            action_dist = torch.distributions.Categorical(action_probs)
             return action_dist.sample().item()  # 從機率分佈中抽樣一個動作                                 # 從類別分佈中抽樣一個動作，並返回對應的索引（即選擇的動作）
         
     #　損失函數計算
@@ -119,7 +119,7 @@ class DQN:
         # Compute target Q-values [custom-reward]
         q_target = rewards + self.gamma * next_q_val * (1 - dones.float())       # 計算 target Q-value
         
-        return T.nn.functional.mse_loss(q_val, q_target.detach())                # 用均方誤差 (MSE) 計算 loss 
+        return torch.nn.functional.mse_loss(q_val, q_target.detach())                # 用均方誤差 (MSE) 計算 loss 
 
     def train_per_step(self, state_dict):
         # Convert one trajectory(s,a,r,n_s) to tensor
@@ -137,10 +137,81 @@ class DQN:
         self.update_count += 1
     
     def _state_2_tensor(self,state_dict):                                        # 將一條經驗軌跡 (s,a,r,n_s,d) 中的數據轉換為 PyTorch 張量
-        states      = T.tensor(state_dict['states'], dtype=T.float32, device=self.device)
-        actions     = T.tensor(state_dict['actions'], dtype=T.long, device=self.device)
-        rewards     = T.tensor(state_dict['rewards'], dtype=T.float32, device=self.device)
-        next_states = T.tensor(state_dict['next_states'], dtype=T.float32, device=self.device)
-        dones       = T.tensor(state_dict['dones'], dtype=T.float32, device=self.device)
+        states      = torch.tensor(state_dict['states'], dtype=torch.float32, device=self.device)
+        actions     = torch.tensor(state_dict['actions'], dtype=torch.long, device=self.device)
+        rewards     = torch.tensor(state_dict['rewards'], dtype=torch.float32, device=self.device)
+        next_states = torch.tensor(state_dict['next_states'], dtype=torch.float32, device=self.device)
+        dones       = torch.tensor(state_dict['dones'], dtype=torch.float32, device=self.device)
 
         return states,actions,rewards,next_states,dones
+    
+
+class ACDQN:
+    def __init__(self, model, state_dim, action_dim, learning_rate, gamma, epsilon, target_update, device):
+        self.device = device
+        self.action_dim = action_dim
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.target_update = target_update
+        self.update_count = 0
+
+        # Initialize Actor-Critic networks
+        self.q_net = model(state_dim, action_dim).to(self.device)
+        self.tgt_q_net = model(state_dim, action_dim).to(self.device)
+        self.tgt_q_net.load_state_dict(self.q_net.state_dict())
+
+        # Optimizer
+        self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=learning_rate)
+
+    def take_action(self, state):
+        # Exploration vs Exploitation
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(self.action_dim)
+
+        state = torch.tensor([state], dtype=torch.float32, device=self.device)
+        with torch.no_grad():
+            action_values, _ = self.q_net(state)
+        return torch.argmax(action_values, dim=1).item()
+
+    def get_loss(self, states, actions, rewards, next_states, dones):
+        # Current Q-values
+        actions = actions.unsqueeze(1)
+        q_values, state_values = self.q_net(states)  # Actor-Critic outputs
+        q_values = q_values.gather(1, actions).squeeze(1)
+
+        # Target Q-values
+        with torch.no_grad():
+            next_q_values, next_state_values = self.tgt_q_net(next_states)
+            next_q_values = next_q_values.max(dim=1)[0]  # Max over actions
+
+        # Critic (state value) to stabilize training
+        q_target = rewards + self.gamma * (1 - dones.float()) * next_state_values.squeeze()
+
+        # Loss
+        q_loss = F.mse_loss(q_values, q_target)
+        critic_loss = F.mse_loss(state_values.squeeze(), q_target)
+
+        return q_loss + critic_loss
+
+    def train_per_step(self, state_dict):
+        # Prepare batch
+        states, actions, rewards, next_states, dones = self._state_2_tensor(state_dict)
+
+        # Compute loss and update network
+        loss = self.get_loss(states, actions, rewards, next_states, dones)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        # Update target network periodically
+        if self.update_count % self.target_update == 0:
+            self.tgt_q_net.load_state_dict(self.q_net.state_dict())
+        self.update_count += 1
+
+    def _state_2_tensor(self, state_dict):
+        states = torch.tensor(state_dict['states'], dtype=torch.float32, device=self.device)
+        actions = torch.tensor(state_dict['actions'], dtype=torch.long, device=self.device)
+        rewards = torch.tensor(state_dict['rewards'], dtype=torch.float32, device=self.device)
+        next_states = torch.tensor(state_dict['next_states'], dtype=torch.float32, device=self.device)
+        dones = torch.tensor(state_dict['dones'], dtype=torch.float32, device=self.device)
+        return states, actions, rewards, next_states, dones
