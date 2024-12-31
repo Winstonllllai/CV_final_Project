@@ -95,11 +95,6 @@ class DQN:
             q_values = self.q_net(state_x)  # 使用 [Q-net] 計算該 state 下每個動作的 Q 值
             action_probs = F.softmax(q_values, dim=1)  # 通過 softmax 將 Q 值轉換為機率分佈
 
-            # 手動增加特定動作的機率
-            preferred_action = 4  # 想要提高的動作索引
-            bias = 1.05  # 偏置值，越大則該動作機率越高
-            action_probs[0][preferred_action] *= bias  # 增加該動作的機率偏置
-
             # 確保 action_probs 是有效的機率分佈（總和為 1）
             action_probs = action_probs / action_probs.sum()
 
@@ -167,7 +162,6 @@ class ACDQN:
         # Exploration vs Exploitation
         if np.random.rand() < self.epsilon:
             return np.random.randint(self.action_dim)
-
         state = torch.tensor([state], dtype=torch.float32, device=self.device)
         with torch.no_grad():
             action_values, _ = self.q_net(state)

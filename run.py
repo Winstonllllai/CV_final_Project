@@ -14,8 +14,8 @@ from model_AC import ActorCriticCNN                                      #自定
 # from DQN import DQN, ReplayMemory                                #用於執行強化學習的主要邏輯 DQN模組中導入回放記憶體，用於存儲和抽取遊戲的狀態、動作、獎勵等樣本，提升訓練穩定性。
 from DQN import ACDQN, PrioritizedReplayMemory
 
-ROUND = 3
-MODEL_LOAD_PATH = None
+ROUND = 4
+MODEL_LOAD_PATH = "ckpt_test/3/step_24_reward_582_custom_582.pth"
 
 # ========== config ===========
 env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0')   #
@@ -35,7 +35,7 @@ EPSILON_END = 0.2               #在訓練過程中，會逐漸從探索（隨�
 TARGET_UPDATE = 50              #每隔幾回合去更新目標網路的權重
 TOTAL_TIMESTEPS = 1000          #總訓練的回合數
 VISUALIZE = True                #是否在訓練過程中渲染遊戲畫面 顯示遊戲畫面
-MAX_STAGNATION_STEPS = 500       # Max steps without x_pos change 500
+MAX_STAGNATION_STEPS = 1000       # Max steps without x_pos change 500
 device = torch.device("mps")
 
 
@@ -72,7 +72,8 @@ cumulative_reward = 0                           # 當前時間步的總累積獎
 
 
 #=======================訓練開始============================
-for timestep in tqdm(range(1, TOTAL_TIMESTEPS + 1), desc="Training Progress"):  #主訓練迴圈，進行TOTAL_TIMESTEPS次迭代
+progress = tqdm(range(1, TOTAL_TIMESTEPS + 1), desc="Training Progress")
+for timestep in progress:  #主訓練迴圈，進行TOTAL_TIMESTEPS次迭代
     state = env.reset()                                                         #重置遊戲環境，獲取初始狀態
     state = preprocess_frame(state)                                             #使用preprocess_frame 將畫面處理為灰階、縮放為84x84
     state = np.expand_dims(state, axis=0)                                       #新增一個維度，適配模型輸入
@@ -112,21 +113,20 @@ for timestep in tqdm(range(1, TOTAL_TIMESTEPS + 1), desc="Training Progress"):  
         custom_reward = distance_reward(info, reward, prev_info, distance)
         custom_reward = death_penalty(info, reward, prev_info)
         custom_reward = time_penalty(info, reward, prev_info)
-        # ===========================
-        cumulative_custom_reward += custom_reward // 1
-
 
 
         # ===========================Check for x_pos stagnation  如果角色的水平位置未改變超過MAX_STAGNATION_STEPS則強制結束本局遊戲
-        if info["x_pos"] == prev_info["x_pos"]:
+        progress.set_postfix({"stagnation_time":stagnation_time})
+        if abs(info["x_pos"] - prev_info["x_pos"]) < 2:
             stagnation_time += 1
             if stagnation_time >= MAX_STAGNATION_STEPS:
+                custom_reward = stagnation_penalty(custom_reward)
                 print(f"Timestep {timestep} - Early stop triggered due to x_pos stagnation.")
                 done = True
         else:
             stagnation_time = 0
-        
-        
+        # ==========================
+        cumulative_custom_reward += custom_reward // 1
         #===========================Store transition in memory 將狀態轉移 (state, action, reward, next_state, done) 存入記憶體
         memory.push(state, action, custom_reward //1, next_state, done)      #使用自訂義獎勵
         # memory.push(state, action, reward, next_state, done)                  #使用其預設好的獎勵
@@ -164,7 +164,7 @@ for timestep in tqdm(range(1, TOTAL_TIMESTEPS + 1), desc="Training Progress"):  
             env.render(mode='human')
 
     # Print cumulative reward for the current timestep
-    print(f"Timestep {timestep} - Total Reward: {cumulative_reward} - Total Custom Reward: {cumulative_custom_reward} - EPSILON: {dqn.epsilon}")
+    print(f"Timestep {timestep} - Total Reward: {cumulative_reward} - Total Custom Reward: {cumulative_custom_reward} - EPSILON: {dqn.epsilon:.4f}")
     # Update epsilon
     dqn.epsilon = max(EPSILON_END, dqn.epsilon * EPSILON_DECAY)     # 隨著時間逐漸減少探索率               
     #訓練前就設定:代理的探索能力會立即降低，可能在策略還不完善時過早專注於利用，會影響最終的學習效果

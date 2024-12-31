@@ -71,7 +71,7 @@ def distance_x_offset_reward(info, reward, prev_info):
 def final_flag_reward(info, reward):
     total_reward = reward
     if info['flag_get']:
-        total_reward += 1000
+        total_reward += 10000
     return total_reward
 
 def score_reward(info, reward, prev_info):
@@ -84,7 +84,7 @@ def distance_reward(info, reward, prev_info,distance):
     if info['x_pos'] > distance:
         delta = info['x_pos'] - distance
         distance = info['x_pos']
-        total_reward += delta
+        total_reward += delta * 5
     return total_reward
 def death_penalty(info, reward, prev_info):
     total_reward = reward
@@ -99,6 +99,9 @@ def time_penalty(info, reward, prev_info):
         total_reward -= time_passed * 0.5
     return total_reward
 
+def stagnation_penalty(reward):
+    total_reward = reward
+    return total_reward + 100
 
 
 #===============to do==========================================
