@@ -2,18 +2,21 @@ import numpy as np
 import torch
 import os
 from tqdm import tqdm
+import time
 
 import gym_super_mario_bros
 from nes_py.wrappers import JoypadSpace
-from gym_super_mario_bros.actions import CUSTOM_MOVEMENT
-
+from movement import CUSTOM_MOVEMENT
 from utils import preprocess_frame
 from model_AC import ActorCriticCNN 
 from DQN import ACDQN
-
+from skipframe import SkipFrame
 # ========== Config ===========
-MODEL_PATH = "ckpt_test/1/step_42_reward_1551_custom_1496.pth"        # 模型權重檔案的存放路徑
+MODEL_PATH = "ckpt_test/14/final_best_reward_1191.pth"        # 模型權重檔案的存放路徑
 env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0')                     # 建立《超級瑪利歐兄弟》的遊戲環境(第1個世界的第1關)
+env = SkipFrame(env, skip = 4)
+# ckpt_test/14/final_best_reward_1191.pth skipframe=4有料
+
 
 # SIMPLE_MOVEMENT可自行定義 以下為自訂範例:
 # SIMPLE_MOVEMENT = [
@@ -63,27 +66,27 @@ if os.path.exists(MODEL_PATH):
         raise
 else:
     raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
-
+# print(dqn.epsilon)
 # ========== Evaluation Loop ===========
 for episode in range(1, TOTAL_EPISODES + 1):
     state = env.reset()                                                   # 重置環境到初始狀態，並獲取環境的 state 初始值
     state = preprocess_frame(state)
     state = np.expand_dims(state, axis=0)                                 # 新增 channel dimension ( [H, W] to [1, H, W] )
     state = np.expand_dims(state, axis=0)                                 # 新增 batch dimension ( [1, H, W] to [1, 1, H, W] )
-                                                                          # 符合 CNN 輸入要求：[batch, channels, height, width]
+                                                                     # 符合 CNN 輸入要求：[batch, channels, height, width]
     done = False
     total_reward = 0
 
     while not done:
         # Take action using the trained policy
         state_tensor = torch.tensor(state, dtype=torch.float32, device=device)    # 將 NumPy 格式的 state 轉換為 PyTorch 的 tensor 格式
-        with torch.no_grad():                                                       
+        with torch.no_grad():                                                   
             action_logits, _ = dqn.q_net(state_tensor)  # 提取動作 logits
-            action_probs = torch.softmax(action_logits, dim=1)          # 使用訓練好的 [Q-net] 計算當前狀態的動作分數，並透過 Softmax 轉換為動作機率分佈，輸出範圍為[0,1]，總合為1            
-                                                                                                                                            
+            action_probs = torch.softmax(action_logits, dim=1)          # 使用訓練好的 [Q-net] 計算當前狀態的動作分數，並透過 Softmax 轉換為動作機率分佈，輸出範圍為[0,1]，總合為1                                                                                                                                
             action = torch.argmax(action_probs, dim=1).item()                     # 選擇機率最高的動作作為當下策略的 action
         next_state, reward, done, info = env.step(action)                         # 根據選擇的 action 與環境互動，獲取 next_state、reward、是否終止
-
+        # if action != 1:
+        #     print(action)
         # Preprocess next state
         next_state = preprocess_frame(next_state)
         next_state = np.expand_dims(next_state, axis=0)                           # 新增 channel dimension
@@ -95,7 +98,7 @@ for episode in range(1, TOTAL_EPISODES + 1):
 
         if VISUALIZE:                                                             # 如果 VISUALIZE=True，則用 env.render() 顯示環境當下的 state
             env.render()
+            time.sleep(0.01)
 
     print(f"Episode {episode}/{TOTAL_EPISODES} - Total Reward: {total_reward}")   # 印出當下的進度 episode/總回合數 和該回合的 total_reward
-
 env.close()

@@ -43,16 +43,17 @@ def get_coin_reward(info, reward, prev_info):
     #寫下蒐集到硬幣會對應多少獎勵
     total_reward = reward                                         #獲得目前已有的獎勵數量
 
-    total_reward += (info['coins'] - prev_info['coins']) * 100     #這裡是定義，如果玩家有蒐集到硬幣，則獎勵加10(這裡是可以自己去定義獎勵要給多少的)
+    total_reward += (info['coins'] - prev_info['coins']) * 50     #這裡是定義，如果玩家有蒐集到硬幣，則獎勵加10(這裡是可以自己去定義獎勵要給多少的)
     return total_reward
+
 #用來鼓勵玩家進行跳躍或高度變化(因為有時前方有障礙物 會被卡住)
 def distance_y_offset_reward(info, reward, prev_info):
     total_reward = reward
     y_offset_change = info['y_pos'] - prev_info['y_pos']
     if y_offset_change > 0:
-        total_reward += 5
+        total_reward += 3
     elif y_offset_change < 0:
-        total_reward += 2
+        total_reward += 1
     return total_reward
 
 #用來鼓勵玩家前進，懲罰原地停留或後退
@@ -60,18 +61,26 @@ def distance_x_offset_reward(info, reward, prev_info):
     total_reward = reward
     x_offset_change = info['x_pos'] - prev_info['x_pos']
     if x_offset_change > 2:
-        total_reward += 5
-    elif x_offset_change < -2:
         total_reward += 3
+    elif x_offset_change < -2:
+        total_reward += 1
     else:
-        total_reward -= 10
+        total_reward -= 5
     return total_reward
+
+def speed_reward(info, reward, distance):
+    total_reward = reward
+    if info['x_pos'] > distance:
+        time_factor = 1 + info['time'] / 100
+        total_reward += 10 * (info['x_pos'] - distance) / time_factor 
+        distance = info['x_pos']
+    return total_reward, distance
 
 #用來鼓勵玩家完成關卡（到達終點旗幟）
 def final_flag_reward(info, reward):
     total_reward = reward
     if info['flag_get']:
-        total_reward += 10000
+        total_reward *= 1.2
     return total_reward
 
 def score_reward(info, reward, prev_info):
@@ -79,29 +88,28 @@ def score_reward(info, reward, prev_info):
     score = info['score'] - prev_info['score'] - info['score']
     if score > 0:
         total_reward += score
-def distance_reward(info, reward, prev_info,distance):
-    total_reward = reward
-    if info['x_pos'] > distance:
-        delta = info['x_pos'] - distance
-        distance = info['x_pos']
-        total_reward += delta * 5
+
     return total_reward
 def death_penalty(info, reward, prev_info):
     total_reward = reward
     if prev_info['life'] > info['life']:
-        total_reward -= 200
+        total_reward -= 2000
     return total_reward
 
-def time_penalty(info, reward, prev_info):
+def altitude_reward(info, reward, max_y=10):
+    total_reward = reward
+    if info['y_pos'] > 2:
+        total_reward += min(info['y_pos'], max_y) * 2  # 限制高度獎勵
+    return total_reward
+
+def alive_time_reward(info, reward, prev_info):
     total_reward = reward
     time_passed = prev_info['time'] - info['time']
     if time_passed > 0:
-        total_reward -= time_passed * 0.5
+        total_reward += time_passed * 3
     return total_reward
 
 def stagnation_penalty(reward):
     total_reward = reward
-    return total_reward + 100
-
-
+    return total_reward - 1500
 #===============to do==========================================

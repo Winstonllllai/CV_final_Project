@@ -84,11 +84,20 @@ class DQN:
         return self.model(state_dim,action_dim).to(self.device)
     
     # action 選擇函數
-    def take_action(self, state):
+    def take_action(self, state,preferred_action=4, preferred_weight=10):
         # Exploration Unknown Policy(探索)
-        if np.random.rand() < self.epsilon:  # 產生一個隨機浮點數（介於 0 和 1 之間），如果這個數字小於 epsilon（探索的機率），則執行隨機動作
-            return np.random.randint(self.action_dim)  # 生成一個在 [0, self.action_dim) 範圍內的隨機整數
+        if np.random.rand() < self.epsilon:
+            if preferred_action is not None:
+                # 建立加權隨機分佈
+                weights = np.ones(self.action_dim)  # 初始化每個動作的權重為 1
+                weights[preferred_action] = preferred_weight  # 增加特定動作的權重
 
+                # 根據權重生成加權分佈的隨機動作
+                probabilities = weights / weights.sum()  # 正規化為概率分佈
+                return np.random.choice(self.action_dim, p=probabilities)
+            else:
+                # 如果沒有設置偏好動作，執行均勻隨機
+                return np.random.randint(self.action_dim)
         # Exploitation Known Policy(利用)                                        # 隨機浮點數大於 epsilon 執行根據推理的動作（利用）
         state_x = torch.tensor([state], dtype=torch.float32, device=self.device)  # 單一 state 轉換為 PyTorch 張量
         with torch.no_grad():
@@ -158,11 +167,22 @@ class ACDQN:
         # Optimizer
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=learning_rate)
 
-    def take_action(self, state):
+    def take_action(self, state, preferred_action = None, preferred_weight = 10):
         # Exploration vs Exploitation
         if np.random.rand() < self.epsilon:
-            return np.random.randint(self.action_dim)
-        state = torch.tensor([state], dtype=torch.float32, device=self.device)
+            if preferred_action is not None:
+                # 建立加權隨機分佈
+                weights = np.ones(self.action_dim)  # 初始化每個動作的權重為 1
+                weights[preferred_action] = preferred_weight  # 增加特定動作的權重
+
+                # 根據權重生成加權分佈的隨機動作
+                probabilities = weights / weights.sum()  # 正規化為概率分佈
+                return np.random.choice(self.action_dim, p=probabilities)
+            else:
+                # 如果沒有設置偏好動作，執行均勻隨機
+                return np.random.randint(self.action_dim)
+        state = np.expand_dims(state, axis=0)
+        state = torch.tensor(state, dtype=torch.float32, device=self.device)
         with torch.no_grad():
             action_values, _ = self.q_net(state)
         return torch.argmax(action_values, dim=1).item()
