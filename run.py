@@ -16,7 +16,7 @@ from model_AC import ActorCriticCNN                                      #自定
 # from DQN import DQN, ReplayMemory                                #用於執行強化學習的主要邏輯 DQN模組中導入回放記憶體，用於存儲和抽取遊戲的狀態、動作、獎勵等樣本，提升訓練穩定性。
 from DQN import ACDQN, PrioritizedReplayMemory
 
-ROUND = 15
+ROUND = 200
 MODEL_LOAD_PATH = "ckpt_test/14/final_best_reward_1191.pth"
 
 # ========== config ===========
@@ -25,16 +25,16 @@ env = JoypadSpace(env, CUSTOM_MOVEMENT)
 env = SkipFrame(env, skip = 8)
 
 #========= basic train config==============================================
-LR = 0.0001
-BATCH_SIZE = 32                 #達到batch size更新主網路參數 達到50次更新目標網路的參數
-GAMMA = 0.93                    #控制模型對長期獎勵和短期獎勵的權衡 gamma靠近1 模型更重視長期獎勵
-MEMORY_SIZE = 10000             #用來儲存，遊戲過程中的記錄 如果存超過了 會刪除最早進來的
-EPSILON_START = 1.0
+LR = 0.0003
+BATCH_SIZE = 256                 #達到batch size更新主網路參數 達到50次更新目標網路的參數
+GAMMA = 0.92                    #控制模型對長期獎勵和短期獎勵的權衡 gamma靠近1 模型更重視長期獎勵
+MEMORY_SIZE = 100000             #用來儲存，遊戲過程中的記錄 如果存超過了 會刪除最早進來的
+EPSILON_START = 0.5
 EPSILON_DECAY = 0.9999
 EPSILON_END = 0.2               #在訓練過程中，會逐漸從探索（隨機選擇動作）轉向利用（選擇模型預測的最佳動作）。
                                 #EPSILON的值會隨著訓練進展逐漸下降，直到達到此最小值0.3
                                 #即訓練後期仍保留 30% 的探索概率，避免模型陷入局部最優解
-TARGET_UPDATE = 50              #每隔幾回合去更新目標網路的權重
+TARGET_UPDATE = 100              #每隔幾回合去更新目標網路的權重
 TOTAL_TIMESTEPS = 20000          #總訓練的回合數
 VISUALIZE = False                #是否在訓練過程中渲染遊戲畫面 顯示遊戲畫面
 MAX_STAGNATION_STEPS = 1000       # Max steps without x_pos change 500
