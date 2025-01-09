@@ -3,26 +3,26 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from matplotlib import pyplot as plt
-import time
+
 
 import gym_super_mario_bros                                      #導入gym_super_mario_bros，這是一個基於 Gym 的模組，用於模擬《Super Mario Bros》遊戲環境。
 from nes_py.wrappers import JoypadSpace                          #從nes_py中導入JoypadSpace，用於限制遊戲中可用的按鈕動作（例如僅允許「移動右」或「跳躍」的動作集合）。
-from movement import CUSTOM_MOVEMENT         #從 gym_super_mario_bros中導入SIMPLE_MOVEMENT，這是一個預定義的按鈕動作集合（如「右移」、「跳躍」等），用於控制 Mario 的行為。
-from skipframe import SkipFrame                                                               #簡化動作空間 NES 控制器有 8 個按鍵（上下左右、A、B、Select、Start），可能的按鍵組合數非常大
+from utils import CUSTOM_MOVEMENT         #從 gym_super_mario_bros中導入SIMPLE_MOVEMENT，這是一個預定義的按鈕動作集合（如「右移」、「跳躍」等），用於控制 Mario 的行為。
+from utils import SkipFrame                                                               #簡化動作空間 NES 控制器有 8 個按鍵（上下左右、A、B、Select、Start），可能的按鍵組合數非常大
 
 from utils import preprocess_frame                               #用於對遊戲的畫面進行預處理，例如灰階化、調整大小等，將其轉換為適合神經網路輸入的格式
 from reward import *                                             #模組中導入所有函式，這些函式用於設計和計算自定義獎勵（例如根據 Mario 的硬幣數量、水平位移等來計算獎勵）。
-from model_AC import ActorCriticCNN                                      #自定義的卷積神經網路模型，用於處理遊戲畫面並生成動作決策
+from model import ActorCriticCNN                                      #自定義的卷積神經網路模型，用於處理遊戲畫面並生成動作決策
 # from DQN import DQN, ReplayMemory                                #用於執行強化學習的主要邏輯 DQN模組中導入回放記憶體，用於存儲和抽取遊戲的狀態、動作、獎勵等樣本，提升訓練穩定性。
 from DQN import ACDQN, PrioritizedReplayMemory
 
 ROUND = 200
-MODEL_LOAD_PATH = "ckpt_test/14/final_best_reward_1191.pth"
+MODEL_LOAD_PATH = None
 
 # ========== config ===========
 env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0')   #
 env = JoypadSpace(env, CUSTOM_MOVEMENT)
-env = SkipFrame(env, skip = 8)
+env = SkipFrame(env, skip = 4)
 
 #========= basic train config==============================================
 LR = 0.0003
@@ -36,7 +36,7 @@ EPSILON_END = 0.2               #在訓練過程中，會逐漸從探索（隨�
                                 #即訓練後期仍保留 30% 的探索概率，避免模型陷入局部最優解
 TARGET_UPDATE = 100              #每隔幾回合去更新目標網路的權重
 TOTAL_TIMESTEPS = 20000          #總訓練的回合數
-VISUALIZE = False                #是否在訓練過程中渲染遊戲畫面 顯示遊戲畫面
+VISUALIZE = True                #是否在訓練過程中渲染遊戲畫面 顯示遊戲畫面
 MAX_STAGNATION_STEPS = 1000       # Max steps without x_pos change 500
 device = torch.device("mps")
 
@@ -164,7 +164,7 @@ for timestep in progress:  #主訓練迴圈，進行TOTAL_TIMESTEPS次迭代
         step += 1
 
         if VISUALIZE:                                   #渲染當前遊戲畫面
-            env.render(mode='human')
+            env.render()
 
     # Print cumulative reward for the current timestep
     print(f"Timestep {timestep} - Total Reward: {cumulative_reward} - Total Custom Reward: {cumulative_custom_reward} - EPSILON: {dqn.epsilon:.4f} - Distance: {distance}")

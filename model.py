@@ -49,18 +49,23 @@ class Res_C2D_Block(nn.Module):
         y += residual
         return nn.LeakyReLU(inplace=False)(y)
 
-class CustomCNN(nn.Module):
+class ActorCriticCNN(nn.Module):
     def __init__(self, input_shape, num_actions):
-        super(CustomCNN, self).__init__()
+        super(ActorCriticCNN, self).__init__()
 
         channels, _, _ = input_shape
 
-        self.basic = Basic_C2D_Block(channels, 24, k_size=4, stride=4, is_BN=False)   # Basic_C2D_Block
-        self.res1  = Res_C2D_Block(24, 48, num_blocks=2, stride=2)                    # Res_C2D_Block
-        self.res2  = Res_C2D_Block(48, 96, num_blocks=2, stride=2)                    # Res_C2D_Block
+        self.basic = Basic_C2D_Block(channels, 24, k_size=4, stride=4, is_BN=False)
+        self.res1  = Res_C2D_Block(24, 48, num_blocks=2, stride=2)
+        self.res2  = Res_C2D_Block(48, 96, num_blocks=2, stride=2)
 
-        self.global_avg_pool = nn.AdaptiveAvgPool2d(1)                                # Adaptive Global Average Pooling (自適應全局平均池化)
-        self.fc = nn.Linear(96, num_actions)                                          # Fully Connected Layer (全連接層)
+        self.global_avg_pool = nn.AdaptiveAvgPool2d(1)  # Shared pooling layer
+
+        # Actor head (outputs action logits)
+        self.actor_fc = nn.Linear(96, num_actions)
+
+        # Critic head (outputs state value)
+        self.critic_fc = nn.Linear(96, 1)
 
     def forward(self, x):
         x = self.basic(x)
@@ -69,5 +74,9 @@ class CustomCNN(nn.Module):
 
         x = self.global_avg_pool(x)
         x = x.view(x.size(0), -1)
-        return self.fc(x)
 
+        # Actor and Critic branches
+        action_logits = self.actor_fc(x)  # Actor head
+        state_value = self.critic_fc(x)   # Critic head
+
+        return action_logits, state_value

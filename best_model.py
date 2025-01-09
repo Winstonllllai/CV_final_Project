@@ -4,11 +4,11 @@ import os
 
 import gym_super_mario_bros
 from nes_py.wrappers import JoypadSpace
-from movement import CUSTOM_MOVEMENT
+from utils import CUSTOM_MOVEMENT
 from utils import preprocess_frame
-from model_AC import ActorCriticCNN
+from model import ActorCriticCNN
 from DQN import ACDQN
-from skipframe import SkipFrame
+from utils import SkipFrame
 
 # ========== Config ===========
 MODEL_DIR = "ckpt_test/16/"  # 模型存放的資料夾路徑

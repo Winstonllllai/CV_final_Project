@@ -6,16 +6,15 @@ import time
 
 import gym_super_mario_bros
 from nes_py.wrappers import JoypadSpace
-from movement import CUSTOM_MOVEMENT
+from utils import CUSTOM_MOVEMENT
 from utils import preprocess_frame
-from model_AC import ActorCriticCNN 
+from model import ActorCriticCNN
 from DQN import ACDQN
-from skipframe import SkipFrame
+from utils import SkipFrame
 # ========== Config ===========
-MODEL_PATH = "ckpt_test/16/step_14000_reward_12973_distance_3161.pth"        # 模型權重檔案的存放路徑
+MODEL_PATH = "best_model1.pth"  # 模型權重檔案的存放路徑
 env = gym_super_mario_bros.make('SuperMarioBros-1-1-v0')                     # 建立《超級瑪利歐兄弟》的遊戲環境(第1個世界的第1關)
-env = SkipFrame(env, skip = 8)
-# ckpt_test/14/final_best_reward_1191.pth skipframe=4有料
+env = SkipFrame(env, skip = 4)
 
 
 # SIMPLE_MOVEMENT可自行定義 以下為自訂範例:
@@ -49,7 +48,7 @@ dqn = ACDQN(
     action_dim=N_ACTIONS,
     learning_rate=0.0001,  
     gamma=0.99,          
-    epsilon=0.1,                   # 設為 0.0 表示完全利用當下的策略
+    epsilon=0.0,                   # 設為 0.0 表示完全利用當下的策略
     target_update=100,            # target [Q-net] 更新的頻率
     device=device
 )
@@ -98,7 +97,7 @@ for episode in range(1, TOTAL_EPISODES + 1):
 
         if VISUALIZE:                                                             # 如果 VISUALIZE=True，則用 env.render() 顯示環境當下的 state
             env.render()
-            time.sleep(0.05)
+            time.sleep(0.03)
 
     print(f"Episode {episode}/{TOTAL_EPISODES} - Total Reward: {total_reward}")   # 印出當下的進度 episode/總回合數 和該回合的 total_reward
 env.close()
